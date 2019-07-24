@@ -1,22 +1,22 @@
 // LIBRARIES //
 #include <PID_v1.h>
 #include "max6675.h"
-
+ 
 // PID values
 float P = 7.3; float I = 2.4; float D = 12.8;
 // float P = 7.3; float I = 2.6; float D = 12.8; (worked, but a little over got to SP quicker)
 //float P = 7.3; float I = 2.4; float D = 12.7; (worked but a little under and took a while to get to SP)
-
+ 
 // temp at each phase
 int tempProfile [] = { 80, 124, 165, 203, 235, 270, 290, 318, 341, 354, 372, 386, 408, 418, 427, 441, 443, 446, 450, 455, 457 };
-
+ 
 // time at each phase
 int timeProfile [] = { 0, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30 }; // 10 min
-
+ 
 // booleans
 bool manualOn = false;
 bool off = true;
-
+ 
 // time values
 int phase = 0;
 int prevPhase = -1;
@@ -26,47 +26,47 @@ int nowTime; // printing
 int serialTime = 0;
 static const unsigned long LOOP_INTERVAL = 1000; // ms
 int lastTime = 0;
-
+ 
 int printInterval = 0;
 int rorInterval = 0;
-
+ 
 // temperature values
 float temperature = 0.0;
 int overshoot = 70;
 int countdown = 0;
 float slope = 0;
-
+ 
 // for rate of rise
 float prevTemperature = 0.0;
-
+ 
 // user controls
 String userIn;
-
+ 
 // pins
 const int heaterPin = 11;
 int heaterpwm = 0;
 int pot5v = 7;
 int potPin = A0;
-
+ 
 const int ktcSO = 8;
 const int ktcCS = 9;
 const int ktcCLK = 10;
-
+ 
 // PID
 double Setpoint, Input, Output;
 int pidPick = 0;
-
+ 
 PID myPID(&Input, &Output, &Setpoint, P, I, D, DIRECT); // initialize tuning parameters
-
+ 
 // thermocouple
 MAX6675 ktc(ktcCLK, ktcCS, ktcSO);
-
+ 
 void setup() {
   Serial.begin(9600);
-
+ 
   pinMode(heaterPin, OUTPUT);
   analogWrite(heaterPin, 0);
-
+ 
   if (manualOn)
   {
     myPID.SetMode(MANUAL);
@@ -75,24 +75,24 @@ void setup() {
   else {
     myPID.SetMode(AUTOMATIC);
   }
-
+ 
   // give the MAX a little time to settle
   delay(500);
-
+ 
   Serial.println("Roasting machine is ready");
   if (manualOn) Serial.println("Roaster is set to manual control.");
   else Serial.println("Roaster is set to automatic control.");
-
+ 
   prevTemperature = ktc.readFahrenheit() - 10;
 }
-
+ 
 void loop() {
-
+ 
   userControls();
-
+ 
   if (!off) {
     currentTime = millis() - startTime;
-
+ 
     if (currentTime - lastTime >= LOOP_INTERVAL) {
       lastTime += LOOP_INTERVAL;
       timeSyncLoop();
@@ -102,13 +102,13 @@ void loop() {
     analogWrite(heaterPin, 0);
   }
 }
-
+ 
 void timeSyncLoop() {
   temperature = ktc.readFahrenheit() - 10;
-
+ 
   // PID Loop
   Input = temperature;
-
+ 
   if (phase == 0) {
     Setpoint = tempProfile [phase]; // jump directly to setpoint in first phase
     if (temperature >= Setpoint) {
@@ -120,7 +120,13 @@ void timeSyncLoop() {
     phase = phase + 1;
     serialTime = millis() / 1000;
     serialTime = serialTime + (timeProfile[phase]);
-
+    
+    //m = (y² - y¹) / (x² - x¹)
+    //y² = tempProfile[phase];
+    //y¹ = tempProfile[phase - 1]);
+    //x² = timeProfile[phase]
+    //x¹ = timeProfile[phase - 1];
+ 
     slope = ((tempProfile[phase]) - (tempProfile[(phase - 1)]));
     slope = (slope / (timeProfile[phase]));
   }
@@ -128,31 +134,42 @@ void timeSyncLoop() {
   if (phase > 0) {
     countdown = serialTime - ((millis() / 1000));
     Setpoint = tempProfile[(phase - 1)] + (slope * ((timeProfile[phase]) - countdown));
+    
+    //x¹ = currentTime / 1000;
+    //x² = 
+    //get x diff here
+    //num = x diff * slope
+    //num = num + y²
+    //num =* -1
+    //y¹ = num
+    //Setpoint = num
+    
+    //url: http://www.umsl.edu/~defreeseca/intalg/ch3extra/slope.htm
   }
-
+ 
   // output PID
   myPID.Compute();
   heaterpwm = map (Output, 0, 255, 0, 255);
-
+ 
   if (temperature < (Setpoint + overshoot)) {
     analogWrite(heaterPin, heaterpwm);
   }
   else {
     analogWrite(heaterPin, 0);
   }
-
+ 
   printValues();
 }
-
+ 
 void printValues() {
   printInterval++;
   rorInterval++;
-
+ 
   if (printInterval == 6) {
     printInterval = 0;
-
+ 
     nowTime = millis() / 1000;
-
+ 
     Serial.print(nowTime / 60); // min
     Serial.print(":");
     if (nowTime % 60 < 10) Serial.print("0");
@@ -161,12 +178,12 @@ void printValues() {
     Serial.print(temperature); // BT
     Serial.print(", ");
     Serial.print(Setpoint); // PID
-
+ 
     if (rorInterval == 30) // ror should print every 30 seconds this way...
     {
       Serial.print(", ");
       Serial.print(heaterpwm); // heaterPWM
-
+ 
       Serial.print(", ");
       
       Serial.println(temperature - prevTemperature); // RoR
@@ -177,18 +194,18 @@ void printValues() {
     else
     {
       Serial.print(", ");
-
+ 
       Serial.println(heaterpwm); // heaterPWM
     }
   }
 }
-
+ 
 void userControls()
 {
   if (Serial.available() > 0)
   {
     userIn = Serial.readStringUntil('\n');
-
+ 
     if (userIn == "off") {
       off = true;
       analogWrite(heaterPin, 0);
@@ -224,7 +241,7 @@ void userControls()
       Serial.println("Choose a value for D:");
       pidPick = 3;
     }
-
+ 
     if (pidPick != 0)
     {
       if (isDigit(userIn.charAt(0)))
@@ -234,11 +251,11 @@ void userControls()
           case 1:
             P = userIn.toFloat();
             break;
-
+ 
           case 2:
             I = userIn.toFloat();
             break;
-
+ 
           case 3:
             D = userIn.toFloat();
             break;
@@ -254,3 +271,4 @@ void userControls()
     }
   }
 }
+ 
