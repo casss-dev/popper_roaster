@@ -1,6 +1,6 @@
 # popper_roaster
 
-This sketch allows automated or manual control over the temperature of a modified popcorn popper coffee roaster.
+> A simple arduino sketch that allows automated or manual control over the temperature of a modified popcorn popper coffee roaster.
 
 ## How it works
 When in automatic mode, users can set a static time and temperature profile in seconds and the PID algorithm will attempt to adjust the voltage sent to the heating element based on a 0-100 scale.
